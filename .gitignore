@@ -39,3 +39,19 @@
 
 # debug information files
 *.dwo
+
+# Build folder
+build/
+
+# VS Code
+.vscode/
+
+# Qt deployment files (optional, falls du sie nicht committen willst)
+*.dll
+*.exe
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
