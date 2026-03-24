@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Pdf PdfWidgets)
 
 add_executable(DocFlowKit
     src/main.cpp
@@ -20,4 +20,8 @@ target_include_directories(DocFlowKit PRIVATE
     src/infrastructure/pdf
 )
 
-target_link_libraries(DocFlowKit PRIVATE Qt6::Widgets)
+target_link_libraries(DocFlowKit PRIVATE
+    Qt6::Widgets
+    Qt6::Pdf
+    Qt6::PdfWidgets
+)
