@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "../infrastructure/pdf/PdfService.h"
 
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -72,9 +73,17 @@ void MainWindow::mergePdfFiles() {
         return;
     }
 
-    QMessageBox::information(
-        this,
-        "Naechster Schritt",
-        "UI steht. Als Naechstes bauen wir den echten Merge mit PdfService."
-    );
+    QStringList inputFiles;
+    for (int i = 0; i < fileListWidget->count(); ++i) {
+        inputFiles << fileListWidget->item(i)->text();
+    }
+
+    PdfService pdfService;
+    QString errorMessage;
+
+    if (pdfService.mergePdfFiles(inputFiles, outputFile, errorMessage)) {
+        QMessageBox::information(this, "Erfolg", "PDFs wurden erfolgreich zusammengefuegt.");
+    } else {
+        QMessageBox::critical(this, "Merge Fehler", errorMessage);
+    }
 }

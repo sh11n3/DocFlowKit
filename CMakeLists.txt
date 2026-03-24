@@ -11,11 +11,13 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 add_executable(DocFlowKit
     src/main.cpp
     src/ui/MainWindow.cpp
+    src/infrastructure/pdf/PdfService.cpp
 )
 
 target_include_directories(DocFlowKit PRIVATE
     src
     src/ui
+    src/infrastructure/pdf
 )
 
 target_link_libraries(DocFlowKit PRIVATE Qt6::Widgets)
