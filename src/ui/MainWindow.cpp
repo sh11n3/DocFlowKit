@@ -24,6 +24,8 @@
 #include <QMimeData>
 #include <QUrl>
 #include <QFileInfo>
+#include <QAbstractItemView>
+#include <QListWidgetItem>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -61,6 +63,8 @@ MainWindow::MainWindow(QWidget *parent)
     splitPage = createSplitPage();
     ocrPage = createPlaceholderPage("OCR", "Hier kommt spaeter OCR-Konfiguration rein.");
     convertPage = createPlaceholderPage("Convert", "Hier kommen spaeter Konvertierungen rein.");
+
+    fileListWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
     toolStack->addWidget(mergePage);
     toolStack->addWidget(splitPage);
@@ -600,15 +604,21 @@ void MainWindow::showConvertPage() {
     renderAllPagesPreview();
 }
 
-void MainWindow::removeSelectedPdfFile() {
-    auto *item = fileListWidget->currentItem();
-    if (!item) return;
+void MainWindow::removeSelectedPdfFile()
+{
+    QList<QListWidgetItem*> selectedItems = fileListWidget->selectedItems();
+    if (selectedItems.isEmpty()) {
+        return;
+    }
 
-    delete fileListWidget->takeItem(fileListWidget->row(item));
+    for (QListWidgetItem* item : selectedItems) {
+        delete fileListWidget->takeItem(fileListWidget->row(item));
+    }
 
     if (fileListWidget->count() > 0) {
         fileListWidget->setCurrentRow(0);
     } else {
+        stopPreviewWorker();
         pdfDocument->close();
         clearPreview();
         previewTitleLabel->setText("Vorschau");
@@ -616,6 +626,8 @@ void MainWindow::removeSelectedPdfFile() {
 
     if (toolStack->currentWidget() == mergePage) {
         startMergePreviewAsync();
+    } else if (fileListWidget->currentItem()) {
+        loadPdf(fileListWidget->currentItem()->text());
     }
 }
 
