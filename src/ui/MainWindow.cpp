@@ -19,6 +19,11 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QRegularExpression>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QUrl>
+#include <QFileInfo>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -41,6 +46,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     setWindowTitle("DocFlowKit");
     resize(1300, 800);
+
+    setAcceptDrops(true);
 
     auto *central = new QWidget(this);
     setCentralWidget(central);
@@ -472,13 +479,67 @@ void MainWindow::startMergePreviewAsync()
     connect(previewThread, &QThread::finished,
             previewThread, &QObject::deleteLater);
 
-    // 🔥 WICHTIG: Pointer reset (kein Crash später)
+
     connect(previewThread, &QThread::finished, this, [this]() {
         previewThread = nullptr;
         previewWorker = nullptr;
     });
 
     previewThread->start();
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (!event->mimeData()->hasUrls()) {
+        event->ignore();
+        return;
+    }
+
+    for (const QUrl &url : event->mimeData()->urls()) {
+        if (url.isLocalFile() && url.toLocalFile().toLower().endsWith(".pdf")) {
+            event->acceptProposedAction();
+            return;
+        }
+    }
+
+    event->ignore();
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    if (!event->mimeData()->hasUrls()) {
+        event->ignore();
+        return;
+    }
+
+    bool added = false;
+
+    for (const QUrl &url : event->mimeData()->urls()) {
+        if (!url.isLocalFile()) {
+            continue;
+        }
+
+        QString filePath = url.toLocalFile();
+
+        if (!filePath.toLower().endsWith(".pdf")) {
+            continue;
+        }
+
+        if (fileListWidget->findItems(filePath, Qt::MatchExactly).isEmpty()) {
+            fileListWidget->addItem(filePath);
+            added = true;
+        }
+    }
+
+    if (added && !fileListWidget->currentItem()) {
+        fileListWidget->setCurrentRow(0);
+    }
+
+    if (added && toolStack->currentWidget() == mergePage) {
+        startMergePreviewAsync();
+    }
+
+    event->acceptProposedAction();
 }
 
 void MainWindow::stopPreviewWorker()

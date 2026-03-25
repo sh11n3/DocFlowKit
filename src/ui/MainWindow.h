@@ -36,6 +36,10 @@ private slots:
     void showConvertPage();
     void updateSplitPreview();
 
+protected:
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
+
 private:
     QWidget* createMergePage();
     QWidget* createSplitPage();
