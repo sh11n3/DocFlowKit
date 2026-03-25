@@ -50,6 +50,8 @@ private:
     void moveSelectedDown();
     void startMergePreviewAsync();
     void stopPreviewWorker();
+    void showStatus(const QString& text);   
+    void hideStatus();                      
     void clearPreview();
     void renderAllPagesPreview();
     void renderSplitPreview(const QString& pageRange);
@@ -80,6 +82,7 @@ private:
     QWidget *previewContainer;
     QVBoxLayout *previewLayout;
     QLabel *previewTitleLabel;
+    QLabel *statusLabel;
 
     QThread* previewThread = nullptr;
     PdfPreviewWorker* previewWorker = nullptr;

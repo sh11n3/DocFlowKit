@@ -26,6 +26,7 @@
 #include <QFileInfo>
 #include <QAbstractItemView>
 #include <QListWidgetItem>
+#include <QApplication>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -38,6 +39,7 @@ MainWindow::MainWindow(QWidget *parent)
       splitButton(new QPushButton("Split", this)),
       ocrButton(new QPushButton("OCR", this)),
       convertButton(new QPushButton("Convert", this)),
+      statusLabel(new QLabel("", this)),
       pageRangeEdit(new QLineEdit(this)),
       toolStack(new QStackedWidget(this)),
       pdfDocument(new QPdfDocument(this)),
@@ -94,7 +96,12 @@ MainWindow::MainWindow(QWidget *parent)
     previewScrollArea->setWidget(previewContainer);
     previewScrollArea->setWidgetResizable(true);
 
+    statusLabel->setAlignment(Qt::AlignCenter);
+    statusLabel->setStyleSheet("color: #666; font-weight: bold; padding: 6px;");
+    statusLabel->hide();
+
     rightLayout->addWidget(previewTitleLabel);
+    rightLayout->addWidget(statusLabel);
     rightLayout->addWidget(previewScrollArea, 1);
 
     rootLayout->addWidget(leftPanel, 0);
@@ -437,6 +444,18 @@ void MainWindow::renderMergePreview()
     previewLayout->addStretch();
 }
 
+void MainWindow::showStatus(const QString& text)
+{
+    statusLabel->setText(text);
+    statusLabel->show();
+}
+
+void MainWindow::hideStatus()
+{
+    statusLabel->clear();
+    statusLabel->hide();
+}
+
 void MainWindow::startMergePreviewAsync()
 {
     stopPreviewWorker();
@@ -659,7 +678,8 @@ void MainWindow::moveSelectedDown()
     }
 }
 
-void MainWindow::mergePdfFiles() {
+void MainWindow::mergePdfFiles()
+{
     if (fileListWidget->count() < 2) {
         QMessageBox::warning(this, "Fehler", "Bitte mindestens 2 PDF-Dateien auswaehlen.");
         return;
@@ -681,10 +701,16 @@ void MainWindow::mergePdfFiles() {
         inputFiles << fileListWidget->item(i)->text();
     }
 
+    showStatus("Processing...");
+    QApplication::processEvents();
+
     PdfService pdfService;
     QString errorMessage;
+    bool success = pdfService.mergePdfFiles(inputFiles, outputFile, errorMessage);
 
-    if (pdfService.mergePdfFiles(inputFiles, outputFile, errorMessage)) {
+    hideStatus();
+
+    if (success) {
         QMessageBox::information(this, "Erfolg", "PDFs wurden erfolgreich zusammengefuegt.");
     } else {
         QMessageBox::critical(this, "Merge Fehler", errorMessage);
