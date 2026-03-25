@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QImage>
 #include <QStringList>
+#include <QVector>
 
 class QListWidget;
 class QPushButton;
@@ -56,6 +57,9 @@ private:
     void renderAllPagesPreview();
     void renderSplitPreview(const QString& pageRange);
     void renderMergePreview();
+    void rebuildMergePagesFromFiles();
+    void moveMergePageUp(int index);
+    void moveMergePageDown(int index);
 
     QList<int> parsePageRange(const QString& pageRange, int maxPages) const;
 
@@ -88,4 +92,11 @@ private:
     PdfPreviewWorker* previewWorker = nullptr;
     QHash<QString, QList<QImage>> pdfPageCache;
     QList<QImage> getRenderedPages(const QString& filePath);
+    
+    struct MergePageItem {
+    QString filePath;
+    int pageIndex;
+    };
+
+    QVector<MergePageItem> mergePages;
 };

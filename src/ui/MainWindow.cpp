@@ -191,7 +191,8 @@ QWidget* MainWindow::createPlaceholderPage(const QString& titleText, const QStri
     return page;
 }
 
-void MainWindow::addPdfFiles() {
+void MainWindow::addPdfFiles()
+{
     QStringList files = QFileDialog::getOpenFileNames(
         this,
         "PDF-Dateien auswaehlen",
@@ -213,7 +214,8 @@ void MainWindow::addPdfFiles() {
     }
 
     if (added && toolStack->currentWidget() == mergePage) {
-        startMergePreviewAsync();
+        rebuildMergePagesFromFiles();
+        renderMergePreview();
     }
 }
 
@@ -413,35 +415,109 @@ void MainWindow::renderMergePreview()
 {
     clearPreview();
 
-    if (fileListWidget->count() <= 0) {
+    if (mergePages.isEmpty()) {
         previewTitleLabel->setText("Merge Vorschau");
         return;
     }
 
     previewTitleLabel->setText("Merge Vorschau");
 
-    for (int fileIndex = 0; fileIndex < fileListWidget->count(); ++fileIndex) {
-        QString filePath = fileListWidget->item(fileIndex)->text();
-        QList<QImage> pages = getRenderedPages(filePath);
+    for (int i = 0; i < mergePages.size(); ++i) {
+        const MergePageItem& item = mergePages[i];
 
-        for (int pageIndex = 0; pageIndex < pages.size(); ++pageIndex) {
-            auto *infoLabel = new QLabel(
-                QString("Datei %1 - Seite %2").arg(fileIndex + 1).arg(pageIndex + 1),
-                this
-            );
-            infoLabel->setAlignment(Qt::AlignCenter);
+        QPdfDocument doc;
+        doc.load(item.filePath);
 
-            auto *pageLabel = new QLabel(this);
-            pageLabel->setAlignment(Qt::AlignCenter);
-            pageLabel->setPixmap(QPixmap::fromImage(pages[pageIndex]));
-            pageLabel->setStyleSheet("border: 2px solid #3a8f3a; margin: 8px;");
-
-            previewLayout->addWidget(infoLabel);
-            previewLayout->addWidget(pageLabel);
+        QSize pageSize = doc.pagePointSize(item.pageIndex).toSize();
+        if (pageSize.isEmpty()) {
+            continue;
         }
+
+        QSize renderSize(300, static_cast<int>(300.0 * pageSize.height() / pageSize.width()));
+        QImage image = doc.render(item.pageIndex, renderSize);
+
+        QImage finalImage(image.size(), QImage::Format_RGB32);
+        finalImage.fill(Qt::white);
+
+        QPainter painter(&finalImage);
+        painter.drawImage(0, 0, image);
+        painter.end();
+
+        QString fileName = QFileInfo(item.filePath).fileName();
+
+        auto *wrapper = new QWidget(this);
+        auto *wrapperLayout = new QVBoxLayout(wrapper);
+
+        auto *infoLabel = new QLabel(
+            QString("%1 - Seite %2").arg(fileName).arg(item.pageIndex + 1),
+            this
+        );
+        infoLabel->setAlignment(Qt::AlignCenter);
+
+        auto *pageLabel = new QLabel(this);
+        pageLabel->setAlignment(Qt::AlignCenter);
+        pageLabel->setPixmap(QPixmap::fromImage(finalImage));
+        pageLabel->setStyleSheet("border: 2px solid #3a8f3a; margin: 8px;");
+
+        auto *buttonRow = new QWidget(this);
+        auto *buttonLayout = new QHBoxLayout(buttonRow);
+
+        auto *upButton = new QPushButton("↑", this);
+        auto *downButton = new QPushButton("↓", this);
+
+        upButton->setEnabled(i > 0);
+        downButton->setEnabled(i < mergePages.size() - 1);
+
+        connect(upButton, &QPushButton::clicked, this, [this, i]() {
+            moveMergePageUp(i);
+        });
+
+        connect(downButton, &QPushButton::clicked, this, [this, i]() {
+            moveMergePageDown(i);
+        });
+
+        buttonLayout->addStretch();
+        buttonLayout->addWidget(upButton);
+        buttonLayout->addWidget(downButton);
+        buttonLayout->addStretch();
+
+        wrapperLayout->addWidget(infoLabel);
+        wrapperLayout->addWidget(pageLabel);
+        wrapperLayout->addWidget(buttonRow);
+
+        previewLayout->addWidget(wrapper);
     }
 
     previewLayout->addStretch();
+}
+
+
+
+void MainWindow::moveMergePageUp(int index)
+{
+    if (index <= 0 || index >= mergePages.size()) {
+        return;
+    }
+
+    mergePages.swapItemsAt(index, index - 1);
+    renderMergePreview();
+}
+
+void MainWindow::moveMergePageDown(int index)
+{
+    if (index < 0 || index >= mergePages.size() - 1) {
+        return;
+    }
+
+    mergePages.swapItemsAt(index, index + 1);
+    renderMergePreview();
+}
+
+void MainWindow::showMergePage()
+{
+    toolStack->setCurrentWidget(mergePage);
+    rebuildMergePagesFromFiles();
+    renderMergePreview();
 }
 
 void MainWindow::showStatus(const QString& text)
@@ -565,6 +641,22 @@ void MainWindow::dropEvent(QDropEvent *event)
     event->acceptProposedAction();
 }
 
+void MainWindow::rebuildMergePagesFromFiles()
+{
+    mergePages.clear();
+
+    for (int i = 0; i < fileListWidget->count(); ++i) {
+        QString filePath = fileListWidget->item(i)->text();
+
+        QPdfDocument doc;
+        doc.load(filePath);
+
+        for (int pageIndex = 0; pageIndex < doc.pageCount(); ++pageIndex) {
+            mergePages.append({ filePath, pageIndex });
+        }
+    }
+}
+
 void MainWindow::stopPreviewWorker()
 {
     if (previewWorker) {
@@ -596,11 +688,6 @@ void MainWindow::updateSplitPreview() {
     } else {
         renderSplitPreview(pageRange);
     }
-}
-
-void MainWindow::showMergePage() {
-    toolStack->setCurrentWidget(mergePage);
-    startMergePreviewAsync();
 }
 
 void MainWindow::showSplitPage() {
@@ -644,7 +731,8 @@ void MainWindow::removeSelectedPdfFile()
     }
 
     if (toolStack->currentWidget() == mergePage) {
-        startMergePreviewAsync();
+        rebuildMergePagesFromFiles();
+        renderMergePreview();
     } else if (fileListWidget->currentItem()) {
         loadPdf(fileListWidget->currentItem()->text());
     }
@@ -660,7 +748,8 @@ void MainWindow::moveSelectedUp()
     fileListWidget->setCurrentRow(row - 1);
 
     if (toolStack->currentWidget() == mergePage) {
-        startMergePreviewAsync();
+        rebuildMergePagesFromFiles();
+        renderMergePreview();
     }
 }
 
@@ -674,7 +763,8 @@ void MainWindow::moveSelectedDown()
     fileListWidget->setCurrentRow(row + 1);
 
     if (toolStack->currentWidget() == mergePage) {
-        startMergePreviewAsync();
+        rebuildMergePagesFromFiles();
+        renderMergePreview();
     }
 }
 
