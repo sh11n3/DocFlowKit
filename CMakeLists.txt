@@ -11,13 +11,18 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Pdf PdfWidgets)
 add_executable(DocFlowKit
     src/main.cpp
     src/ui/MainWindow.cpp
+    src/ui/MainWindow.h
     src/infrastructure/pdf/PdfService.cpp
+    src/infrastructure/pdf/PdfService.h
+    src/workers/PdfPreviewWorker.cpp
+    src/workers/PdfPreviewWorker.h
 )
 
 target_include_directories(DocFlowKit PRIVATE
     src
     src/ui
     src/infrastructure/pdf
+    src/workers
 )
 
 target_link_libraries(DocFlowKit PRIVATE

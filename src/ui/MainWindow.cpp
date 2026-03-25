@@ -1,10 +1,12 @@
 #include "MainWindow.h"
 #include "../infrastructure/pdf/PdfService.h"
+#include "../workers/PdfPreviewWorker.h"
 
 #include <QStackedWidget>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QThread>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
@@ -23,6 +25,8 @@ MainWindow::MainWindow(QWidget *parent)
       fileListWidget(new QListWidget(this)),
       addFilesButton(new QPushButton("PDFs hinzufuegen", this)),
       removeFileButton(new QPushButton("PDF entfernen", this)),
+      moveUpButton(new QPushButton("↑ Move Up", this)),
+      moveDownButton(new QPushButton("↓ Move Down", this)),
       mergeButton(new QPushButton("Merge", this)),
       splitButton(new QPushButton("Split", this)),
       ocrButton(new QPushButton("OCR", this)),
@@ -58,6 +62,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     leftLayout->addWidget(addFilesButton);
     leftLayout->addWidget(removeFileButton);
+    leftLayout->addWidget(moveUpButton);
+    leftLayout->addWidget(moveDownButton);
     leftLayout->addWidget(mergeButton);
     leftLayout->addWidget(splitButton);
     leftLayout->addWidget(ocrButton);
@@ -85,6 +91,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(addFilesButton, &QPushButton::clicked, this, &MainWindow::addPdfFiles);
     connect(removeFileButton, &QPushButton::clicked, this, &MainWindow::removeSelectedPdfFile);
+    connect(moveUpButton, &QPushButton::clicked, this, &MainWindow::moveSelectedUp);
+    connect(moveDownButton, &QPushButton::clicked, this, &MainWindow::moveSelectedDown);
     connect(mergeButton, &QPushButton::clicked, this, &MainWindow::showMergePage);
     connect(splitButton, &QPushButton::clicked, this, &MainWindow::showSplitPage);
     connect(ocrButton, &QPushButton::clicked, this, &MainWindow::showOcrPage);
@@ -92,16 +100,19 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(fileListWidget, &QListWidget::currentTextChanged, this, [this](const QString &text) {
         if (toolStack->currentWidget() == mergePage) {
-            renderMergePreview();
-        } else {
-           loadPdf(text);
+            return; // in Merge keine Neuladung bei einfachem Anklicken
         }
+
+        loadPdf(text);
     });
 
     connect(pageRangeEdit, &QLineEdit::textChanged, this, &MainWindow::updateSplitPreview);
 }
 
-MainWindow::~MainWindow() {}
+MainWindow::~MainWindow()
+{
+    stopPreviewWorker();
+}
 
 QWidget* MainWindow::createMergePage() {
     auto *page = new QWidget(this);
@@ -170,14 +181,21 @@ void MainWindow::addPdfFiles() {
         "PDF Files (*.pdf)"
     );
 
+    bool added = false;
+
     for (const QString &file : files) {
         if (fileListWidget->findItems(file, Qt::MatchExactly).isEmpty()) {
             fileListWidget->addItem(file);
+            added = true;
         }
     }
 
     if (fileListWidget->count() > 0 && !fileListWidget->currentItem()) {
         fileListWidget->setCurrentRow(0);
+    }
+
+    if (added && toolStack->currentWidget() == mergePage) {
+        startMergePreviewAsync();
     }
 }
 
@@ -290,6 +308,38 @@ QList<int> MainWindow::parsePageRange(const QString& pageRange, int maxPages) co
     return result;
 }
 
+QList<QImage> MainWindow::getRenderedPages(const QString& filePath)
+{
+    if (pdfPageCache.contains(filePath)) {
+        return pdfPageCache[filePath];
+    }
+
+    QList<QImage> pages;
+
+    QPdfDocument doc;
+    doc.load(filePath);
+
+    for (int pageIndex = 0; pageIndex < doc.pageCount(); ++pageIndex) {
+        QSize pageSize = doc.pagePointSize(pageIndex).toSize();
+        if (pageSize.isEmpty()) continue;
+
+        QSize renderSize(300, static_cast<int>(300.0 * pageSize.height() / pageSize.width()));
+        QImage image = doc.render(pageIndex, renderSize);
+
+        QImage finalImage(image.size(), QImage::Format_RGB32);
+        finalImage.fill(Qt::white);
+
+        QPainter painter(&finalImage);
+        painter.drawImage(0, 0, image);
+        painter.end();
+
+        pages.append(finalImage);
+    }
+
+    pdfPageCache.insert(filePath, pages);
+    return pages;
+}
+
 void MainWindow::renderSplitPreview(const QString& pageRange) {
     clearPreview();
 
@@ -341,7 +391,8 @@ void MainWindow::renderSplitPreview(const QString& pageRange) {
     previewLayout->addStretch();
 }
 
-void MainWindow::renderMergePreview() {
+void MainWindow::renderMergePreview()
+{
     clearPreview();
 
     if (fileListWidget->count() <= 0) {
@@ -353,26 +404,9 @@ void MainWindow::renderMergePreview() {
 
     for (int fileIndex = 0; fileIndex < fileListWidget->count(); ++fileIndex) {
         QString filePath = fileListWidget->item(fileIndex)->text();
+        QList<QImage> pages = getRenderedPages(filePath);
 
-        QPdfDocument tempDoc;
-        tempDoc.load(filePath);
-
-        for (int pageIndex = 0; pageIndex < tempDoc.pageCount(); ++pageIndex) {
-            QSize pageSize = tempDoc.pagePointSize(pageIndex).toSize();
-            if (pageSize.isEmpty()) {
-                continue;
-            }
-
-            QSize renderSize(600, static_cast<int>(600.0 * pageSize.height() / pageSize.width()));
-            QImage image = tempDoc.render(pageIndex, renderSize);
-
-            QImage finalImage(image.size(), QImage::Format_RGB32);
-            finalImage.fill(Qt::white);
-
-            QPainter painter(&finalImage);
-            painter.drawImage(0, 0, image);
-            painter.end();
-
+        for (int pageIndex = 0; pageIndex < pages.size(); ++pageIndex) {
             auto *infoLabel = new QLabel(
                 QString("Datei %1 - Seite %2").arg(fileIndex + 1).arg(pageIndex + 1),
                 this
@@ -381,7 +415,7 @@ void MainWindow::renderMergePreview() {
 
             auto *pageLabel = new QLabel(this);
             pageLabel->setAlignment(Qt::AlignCenter);
-            pageLabel->setPixmap(QPixmap::fromImage(finalImage));
+            pageLabel->setPixmap(QPixmap::fromImage(pages[pageIndex]));
             pageLabel->setStyleSheet("border: 2px solid #3a8f3a; margin: 8px;");
 
             previewLayout->addWidget(infoLabel);
@@ -390,6 +424,76 @@ void MainWindow::renderMergePreview() {
     }
 
     previewLayout->addStretch();
+}
+
+void MainWindow::startMergePreviewAsync()
+{
+    stopPreviewWorker();
+    clearPreview();
+
+    QStringList files;
+    for (int i = 0; i < fileListWidget->count(); ++i) {
+        files << fileListWidget->item(i)->text();
+    }
+
+    previewThread = new QThread(this);
+    previewWorker = new PdfPreviewWorker();
+
+    previewWorker->setFiles(files);
+    previewWorker->moveToThread(previewThread);
+
+    connect(previewThread, &QThread::started,
+            previewWorker, &PdfPreviewWorker::process);
+
+    // 🔥 PERFORMANCE FIX (wichtig)
+    connect(previewWorker, &PdfPreviewWorker::pageReady, this,
+        [this](const QImage& img, const QString& label) {
+
+            previewScrollArea->setUpdatesEnabled(false);
+
+            auto *info = new QLabel(label, this);
+            info->setAlignment(Qt::AlignCenter);
+
+            auto *page = new QLabel(this);
+            page->setPixmap(QPixmap::fromImage(img));
+
+            previewLayout->addWidget(info);
+            previewLayout->addWidget(page);
+
+            previewScrollArea->setUpdatesEnabled(true);
+        });
+
+    connect(previewWorker, &PdfPreviewWorker::finished,
+            previewThread, &QThread::quit);
+
+    connect(previewWorker, &PdfPreviewWorker::finished,
+            previewWorker, &QObject::deleteLater);
+
+    connect(previewThread, &QThread::finished,
+            previewThread, &QObject::deleteLater);
+
+    // 🔥 WICHTIG: Pointer reset (kein Crash später)
+    connect(previewThread, &QThread::finished, this, [this]() {
+        previewThread = nullptr;
+        previewWorker = nullptr;
+    });
+
+    previewThread->start();
+}
+
+void MainWindow::stopPreviewWorker()
+{
+    if (previewWorker) {
+        previewWorker->cancel();
+    }
+
+    if (previewThread) {
+        previewThread->quit();
+        previewThread->wait();
+
+        previewThread = nullptr;
+        previewWorker = nullptr;
+    }
 }
 
 void MainWindow::updateSplitPreview() {
@@ -412,7 +516,7 @@ void MainWindow::updateSplitPreview() {
 
 void MainWindow::showMergePage() {
     toolStack->setCurrentWidget(mergePage);
-    renderMergePreview();
+    startMergePreviewAsync();
 }
 
 void MainWindow::showSplitPage() {
@@ -447,6 +551,38 @@ void MainWindow::removeSelectedPdfFile() {
         pdfDocument->close();
         clearPreview();
         previewTitleLabel->setText("Vorschau");
+    }
+
+    if (toolStack->currentWidget() == mergePage) {
+        startMergePreviewAsync();
+    }
+}
+
+void MainWindow::moveSelectedUp()
+{
+    int row = fileListWidget->currentRow();
+    if (row <= 0) return;
+
+    QListWidgetItem* item = fileListWidget->takeItem(row);
+    fileListWidget->insertItem(row - 1, item);
+    fileListWidget->setCurrentRow(row - 1);
+
+    if (toolStack->currentWidget() == mergePage) {
+        startMergePreviewAsync();
+    }
+}
+
+void MainWindow::moveSelectedDown()
+{
+    int row = fileListWidget->currentRow();
+    if (row < 0 || row >= fileListWidget->count() - 1) return;
+
+    QListWidgetItem* item = fileListWidget->takeItem(row);
+    fileListWidget->insertItem(row + 1, item);
+    fileListWidget->setCurrentRow(row + 1);
+
+    if (toolStack->currentWidget() == mergePage) {
+        startMergePreviewAsync();
     }
 }
 

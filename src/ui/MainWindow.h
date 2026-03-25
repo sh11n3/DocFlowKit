@@ -1,6 +1,9 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QHash>
+#include <QImage>
+#include <QStringList>
 
 class QListWidget;
 class QPushButton;
@@ -11,6 +14,9 @@ class QLabel;
 class QPdfDocument;
 class QScrollArea;
 class QVBoxLayout;
+class QThread;
+class PdfPreviewWorker;
+
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -36,6 +42,10 @@ private:
     QWidget* createPlaceholderPage(const QString& title, const QString& text);
 
     void loadPdf(const QString& filePath);
+    void moveSelectedUp();
+    void moveSelectedDown();
+    void startMergePreviewAsync();
+    void stopPreviewWorker();
     void clearPreview();
     void renderAllPagesPreview();
     void renderSplitPreview(const QString& pageRange);
@@ -45,6 +55,8 @@ private:
 
     QListWidget *fileListWidget;
     QPushButton *addFilesButton;
+    QPushButton *moveUpButton;
+    QPushButton *moveDownButton;
     QPushButton *mergeButton;
     QPushButton *splitButton;
     QPushButton *ocrButton;
@@ -64,4 +76,9 @@ private:
     QWidget *previewContainer;
     QVBoxLayout *previewLayout;
     QLabel *previewTitleLabel;
+
+    QThread* previewThread = nullptr;
+    PdfPreviewWorker* previewWorker = nullptr;
+    QHash<QString, QList<QImage>> pdfPageCache;
+    QList<QImage> getRenderedPages(const QString& filePath);
 };
