@@ -36,6 +36,7 @@ private slots:
     void showOcrPage();
     void showConvertPage();
     void updateSplitPreview();
+    void runOcrForSelectedPdf();
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
@@ -44,6 +45,7 @@ protected:
 private:
     QWidget* createMergePage();
     QWidget* createSplitPage();
+    QWidget* createOcrPage();
     QWidget* createPlaceholderPage(const QString& title, const QString& text);
 
     void loadPdf(const QString& filePath);

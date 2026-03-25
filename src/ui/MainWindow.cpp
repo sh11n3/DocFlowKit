@@ -63,7 +63,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     mergePage = createMergePage();
     splitPage = createSplitPage();
-    ocrPage = createPlaceholderPage("OCR", "Hier kommt spaeter OCR-Konfiguration rein.");
+    ocrPage = createOcrPage();
     convertPage = createPlaceholderPage("Convert", "Hier kommen spaeter Konvertierungen rein.");
 
     fileListWidget->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -168,6 +168,64 @@ QWidget* MainWindow::createSplitPage() {
     layout->addWidget(title);
     layout->addWidget(new QLabel("Waehle eine PDF in der Liste und gib den Bereich an.", this));
     layout->addWidget(pageRangeEdit);
+    layout->addWidget(runButton);
+    layout->addStretch();
+
+    return page;
+}
+
+void MainWindow::runOcrForSelectedPdf()
+{
+    if (fileListWidget->count() < 1 || !fileListWidget->currentItem()) {
+        QMessageBox::warning(this, "Fehler", "Bitte eine PDF auswaehlen.");
+        return;
+    }
+
+    QString inputFile = fileListWidget->currentItem()->text();
+
+    QString outputFile = QFileDialog::getSaveFileName(
+        this,
+        "OCR PDF speichern",
+        "ocr_output.pdf",
+        "PDF Files (*.pdf)"
+    );
+
+    if (outputFile.isEmpty()) {
+        return;
+    }
+
+    showStatus("OCR Processing...");
+    QApplication::processEvents();
+
+    PdfService pdfService;
+    QString errorMessage;
+    bool success = pdfService.runOcrOnPdf(inputFile, outputFile, errorMessage);
+
+    hideStatus();
+
+    if (success) {
+        QMessageBox::information(this, "Erfolg", "Durchsuchbare PDF wurde erfolgreich erstellt.");
+    } else {
+        QMessageBox::critical(this, "OCR Fehler", errorMessage);
+    }
+}
+
+QWidget* MainWindow::createOcrPage()
+{
+    auto *page = new QWidget(this);
+    auto *layout = new QVBoxLayout(page);
+
+    auto *title = new QLabel("OCR", this);
+    title->setAlignment(Qt::AlignCenter);
+
+    auto *info = new QLabel("Erzeugt aus einer Bild-/Scan-PDF eine durchsuchbare PDF mit Textlayer.", this);
+    info->setWordWrap(true);
+
+    auto *runButton = new QPushButton("OCR ausfuehren", this);
+    connect(runButton, &QPushButton::clicked, this, &MainWindow::runOcrForSelectedPdf);
+
+    layout->addWidget(title);
+    layout->addWidget(info);
     layout->addWidget(runButton);
     layout->addStretch();
 

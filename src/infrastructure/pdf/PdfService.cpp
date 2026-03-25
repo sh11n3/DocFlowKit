@@ -1,6 +1,8 @@
 #include "PdfService.h"
 
 #include <QProcess>
+#include <QDebug>
+#include <QFileInfo>
 
 bool PdfService::mergePdfPages(const QStringList& pageSpecs, const QString& outputFile, QString& errorMessage) {
     if (pageSpecs.isEmpty()) {
@@ -18,7 +20,7 @@ bool PdfService::mergePdfPages(const QStringList& pageSpecs, const QString& outp
     args << "--" << outputFile;
 
     QProcess process;
-    process.start("qpdf", args);
+    process.start("py", QStringList() << "-m" << "ocrmypdf" << args);
     process.waitForFinished();
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
@@ -55,6 +57,51 @@ bool PdfService::splitPdfFile(const QString& inputFile, const QString& outputFil
         if (errorMessage.isEmpty()) {
             errorMessage = "qpdf konnte die PDF nicht splitten.";
         }
+        return false;
+    }
+
+    return true;
+}
+
+bool PdfService::runOcrOnPdf(const QString& inputFile, const QString& outputFile, QString& errorMessage)
+{
+    if (inputFile.isEmpty()) {
+        errorMessage = "Keine Eingabe-PDF ausgewaehlt.";
+        return false;
+    }
+
+    if (outputFile.isEmpty()) {
+        errorMessage = "Kein Ausgabe-Pfad angegeben.";
+        return false;
+    }
+
+    QStringList args;
+    args << "--force-ocr"
+         << "--output-type" << "pdf"
+         << "-l" << "deu+eng"
+         << inputFile
+         << outputFile;
+
+    QProcess process;
+    process.start("py", QStringList() << "-m" << "ocrmypdf" << args);
+    process.waitForFinished(-1);
+
+    QString stdOut = process.readAllStandardOutput();
+    QString stdErr = process.readAllStandardError();
+
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        errorMessage = stdErr;
+        if (errorMessage.isEmpty()) {
+            errorMessage = stdOut;
+        }
+        if (errorMessage.isEmpty()) {
+            errorMessage = "OCRmyPDF konnte die PDF nicht verarbeiten.";
+        }
+        return false;
+    }
+
+    if (!QFileInfo::exists(outputFile)) {
+        errorMessage = "OCR lief ohne Fehler, aber die Ausgabedatei wurde nicht gefunden.";
         return false;
     }
 
