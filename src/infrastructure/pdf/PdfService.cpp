@@ -2,17 +2,17 @@
 
 #include <QProcess>
 
-bool PdfService::mergePdfFiles(const QStringList& inputFiles, const QString& outputFile, QString& errorMessage) {
-    if (inputFiles.size() < 2) {
-        errorMessage = "Mindestens 2 PDF-Dateien sind erforderlich.";
+bool PdfService::mergePdfPages(const QStringList& pageSpecs, const QString& outputFile, QString& errorMessage) {
+    if (pageSpecs.isEmpty()) {
+        errorMessage = "Keine Seiten zum Mergen vorhanden.";
         return false;
     }
 
     QStringList args;
     args << "--empty" << "--pages";
 
-    for (const QString& file : inputFiles) {
-        args << file;
+    for (const QString& spec : pageSpecs) {
+        args << spec;
     }
 
     args << "--" << outputFile;
@@ -24,7 +24,7 @@ bool PdfService::mergePdfFiles(const QStringList& inputFiles, const QString& out
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         errorMessage = process.readAllStandardError();
         if (errorMessage.isEmpty()) {
-            errorMessage = "qpdf konnte die Dateien nicht mergen.";
+            errorMessage = "qpdf konnte die Seiten nicht mergen.";
         }
         return false;
     }

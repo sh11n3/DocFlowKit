@@ -770,8 +770,8 @@ void MainWindow::moveSelectedDown()
 
 void MainWindow::mergePdfFiles()
 {
-    if (fileListWidget->count() < 2) {
-        QMessageBox::warning(this, "Fehler", "Bitte mindestens 2 PDF-Dateien auswaehlen.");
+    if (mergePages.isEmpty()) {
+        QMessageBox::warning(this, "Fehler", "Keine Seiten zum Export vorhanden.");
         return;
     }
 
@@ -786,9 +786,11 @@ void MainWindow::mergePdfFiles()
         return;
     }
 
-    QStringList inputFiles;
-    for (int i = 0; i < fileListWidget->count(); ++i) {
-        inputFiles << fileListWidget->item(i)->text();
+    QStringList pageSpecs;
+    pageSpecs.reserve(mergePages.size() * 2);
+
+    for (const MergePageItem& item : mergePages) {
+        pageSpecs << item.filePath << QString::number(item.pageIndex + 1);
     }
 
     showStatus("Processing...");
@@ -796,12 +798,12 @@ void MainWindow::mergePdfFiles()
 
     PdfService pdfService;
     QString errorMessage;
-    bool success = pdfService.mergePdfFiles(inputFiles, outputFile, errorMessage);
+    bool success = pdfService.mergePdfPages(pageSpecs, outputFile, errorMessage);
 
     hideStatus();
 
     if (success) {
-        QMessageBox::information(this, "Erfolg", "PDFs wurden erfolgreich zusammengefuegt.");
+        QMessageBox::information(this, "Erfolg", "PDF wurde mit neuer Seitenreihenfolge erstellt.");
     } else {
         QMessageBox::critical(this, "Merge Fehler", errorMessage);
     }
